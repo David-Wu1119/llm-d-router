@@ -94,7 +94,7 @@ Each scheduling profile runs the following stages. Multiple profiles may run for
 
 3. **Pod Selection**
    - The highest-scored pod is selected
-   - If multiple pods share the same score, one is selected at random
+   - If multiple pods share the top score, `max-score-picker` (the default) rotates among them round-robin
 
 ---
 
@@ -258,7 +258,7 @@ Scheduling:
 - A scorer's `weight` defaults to `1.0` when omitted.
 
 RequestHandler:
-- When no parsers are configured, `openai-parser`, `anthropic-parser`, and `vllmhttp-parser` are used.
+- When no parsers are configured, `openai-parser`, `anthropic-parser`, `vllmhttp-parser`, and `systemone-parser` are used, followed by `passthrough-parser` as the fallback for unclaimed paths.
 
 FlowControl:
 - The flow control admission layer itself is off by default; enable it with
@@ -276,6 +276,9 @@ DataProducer:
 - When a plugin needs data from a producer but none is configured, the default producer for that data
   is created automatically. Defaults: `token-producer`, `approx-prefix-cache-producer`,
   `mm-embeddings-cache-producer`, `inflight-load-producer`, `predicted-latency-producer`, `session-id-producer`.
+  Creation is transitive, since an auto-created producer can itself require a data key with a default,
+  and is bounded by the number of distinct default producers. Startup fails if a required data key is
+  still unproduced when creation stops.
 
 ### Available plugins
 
@@ -379,6 +382,8 @@ Enable chunked decode via the pd-sidecar flag:
 >   every chunk.
 > - the request sets `n` greater than 1, because each chunk would continue the text of the first
 >   choice for every choice.
+> - the request declares a non-empty `tools` array and does not set `tool_choice: none`, because a
+>   tool call cannot be reassembled across chunk boundaries.
 
 ---
 

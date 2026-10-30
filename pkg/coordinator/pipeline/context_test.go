@@ -72,17 +72,18 @@ func TestForwardedHeaders_RequestIDDoesNotDuplicateOnRestamp(t *testing.T) {
 func TestForwardedHeaders_ExcludesHopByHopAndContentHeaders(t *testing.T) {
 	rc := &RequestContext{
 		OriginalHeaders: http.Header{
-			"Connection":     {"keep-alive"},
-			"Content-Length": {"42"},
-			"Host":           {"example.com"},
-			"Content-Type":   {"application/json"},
-			"X-Request-Id":   {"abc-123"},
+			"Connection":      {"keep-alive"},
+			"Content-Length":  {"42"},
+			"Host":            {"example.com"},
+			"Content-Type":    {"application/json"},
+			"Accept-Encoding": {"gzip, deflate, br"},
+			"X-Request-Id":    {"abc-123"},
 		},
 	}
 
 	out := rc.ForwardedHeaders()
 
-	for _, excluded := range []string{"connection", "content-length", "host", "content-type"} {
+	for _, excluded := range []string{"connection", "content-length", "host", "content-type", "accept-encoding"} {
 		if _, ok := out[excluded]; ok {
 			t.Errorf("header %q should be excluded from forwarded headers", excluded)
 		}
@@ -97,6 +98,7 @@ func TestForwardedHeaders_ExcludesInternalRoutingHeaders(t *testing.T) {
 		OriginalHeaders: http.Header{
 			"X-Llm-D-Epp-Profile":   {"decode"},
 			"X-Llm-D-Pin-Host-Port": {"10.0.3.7:8000"},
+			"Prefer":                {"if-available"},
 			"X-Request-Id":          {"abc-123"},
 			"Authorization":         {"Bearer token"},
 		},
@@ -104,7 +106,7 @@ func TestForwardedHeaders_ExcludesInternalRoutingHeaders(t *testing.T) {
 
 	out := rc.ForwardedHeaders()
 
-	for _, name := range []string{"x-llm-d-epp-profile", "x-llm-d-pin-host-port"} {
+	for _, name := range []string{"x-llm-d-epp-profile", "x-llm-d-pin-host-port", "prefer"} {
 		if _, ok := out[name]; ok {
 			t.Fatalf("%s should not be forwarded: %v", name, out)
 		}
