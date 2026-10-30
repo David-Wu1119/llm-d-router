@@ -587,14 +587,17 @@ type ImagesGenerationsRequest struct {
 	Size string `json:"size,omitempty"`
 	// NumInferenceSteps is the number of denoising steps. Nil means the server default.
 	NumInferenceSteps *int64 `json:"num_inference_steps,omitempty"`
+	// NegativePrompt describes what to avoid in the generated image(s) and is
+	// encoded alongside Prompt for classifier-free guidance.
+	NegativePrompt string `json:"negative_prompt,omitempty"`
 }
 
 func (i *ImagesGenerationsRequest) String() string {
 	if i == nil {
 		return nilStr
 	}
-	return fmt.Sprintf("{PromptLength: %d, Size: %s, N: %v, NumInferenceSteps: %v}",
-		len(i.Prompt), i.Size, i.N, i.NumInferenceSteps)
+	return fmt.Sprintf("{PromptLength: %d, Size: %s, N: %v, NumInferenceSteps: %v, NegativePromptLength: %d}",
+		len(i.Prompt), i.Size, i.N, i.NumInferenceSteps, len(i.NegativePrompt))
 }
 
 // GenerateRequest holds pre-tokenized input for native generate endpoints
@@ -771,6 +774,57 @@ type AudioBlock struct {
 
 type VideoBlock struct {
 	URL string `json:"url,omitempty"`
+}
+
+// UnmarshalJSON takes the type of a part without one from its media field, in
+// the order vLLM checks them, since vLLM serves parts such as {"image_url": "<url>"}.
+func (b *ContentBlock) UnmarshalJSON(data []byte) error {
+	type contentBlock ContentBlock
+	if err := json.Unmarshal(data, (*contentBlock)(b)); err != nil {
+		return err
+	}
+	if b.Type == "" {
+		switch {
+		case b.ImageURL.URL != "":
+			b.Type = reqcommon.PartTypeImageURL
+		case b.AudioURL.URL != "":
+			b.Type = reqcommon.PartTypeAudioURL
+		case b.InputAudio.Data != "":
+			b.Type = reqcommon.PartTypeInputAudio
+		case b.VideoURL.URL != "":
+			b.Type = reqcommon.PartTypeVideoURL
+		}
+	}
+	return nil
+}
+
+// UnmarshalJSON also accepts a bare URL string, which vLLM serves in a part without a type.
+func (b *ImageBlock) UnmarshalJSON(data []byte) error {
+	return unmarshalMediaURL(data, &b.URL)
+}
+
+// UnmarshalJSON also accepts a bare URL string, which vLLM serves in a part without a type.
+func (b *AudioURLBlock) UnmarshalJSON(data []byte) error {
+	return unmarshalMediaURL(data, &b.URL)
+}
+
+// UnmarshalJSON also accepts a bare URL string, which vLLM serves in a part without a type.
+func (b *VideoBlock) UnmarshalJSON(data []byte) error {
+	return unmarshalMediaURL(data, &b.URL)
+}
+
+func unmarshalMediaURL(data []byte, url *string) error {
+	if trimmed := bytes.TrimLeft(data, " \t\r\n"); len(trimmed) > 0 && trimmed[0] == '"' {
+		return json.Unmarshal(data, url)
+	}
+	var obj struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	*url = obj.URL
+	return nil
 }
 
 // UnmarshalJSON accepts either a string or an array of content blocks. The first
